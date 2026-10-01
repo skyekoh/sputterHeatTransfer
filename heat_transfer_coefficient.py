@@ -1,6 +1,8 @@
 """Estimate water-side h for the two parallel drilled channels in outline.md.
 
-Python 3, standard library only. Examples (inputs are illustrative, not measured):
+Python 3, standard library only. Default: 7.25-inch channels, advertised 600 L/h total, equal split.
+Examples (flow inputs are illustrative, not measured):
+  python heat_transfer_coefficient.py
   python heat_transfer_coefficient.py --length-mm 100 --total-flow-lph 60
   python heat_transfer_coefficient.py --length-mm 100 --branch-flow-lph 20 40
   python heat_transfer_coefficient.py --length-mm 100 --advertised-flow
@@ -21,6 +23,7 @@ https://ansyshelp.ansys.com/public/Views/Secured/MotorCAD/v252/en/Motor-CAD_UG/M
 import argparse
 import math
 
+CHANNEL_LENGTH_MM = 7.25 * 25.4
 CHANNEL_DIAMETER_M = 0.25 * 0.0254
 TUBE_OD_M = 0.25 * 0.0254
 TUBE_WALL_M = 0.0625 * 0.0254
@@ -98,9 +101,9 @@ def calculate_channel(flow_lph, length_mm, wall_condition="temperature"):
 def main():
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--length-mm", required=True, type=positive,
-                        help="Heated length of EACH channel in mm (equal lengths assumed).")
-    flow = parser.add_mutually_exclusive_group(required=True)
+    parser.add_argument("--length-mm", default=CHANNEL_LENGTH_MM, type=positive,
+                        help="Default 184.15 mm (7.25 inches). Heated length of EACH channel in mm (equal lengths assumed).")
+    flow = parser.add_mutually_exclusive_group()
     flow.add_argument("--total-flow-lph", type=positive,
                       help="Actual total baseplate flow in L/h; assumes equal splitting.")
     flow.add_argument("--branch-flow-lph", nargs=2, type=positive,
@@ -114,15 +117,16 @@ def main():
     if args.branch_flow_lph:
         flows = args.branch_flow_lph
     else:
-        total = 600.0 if args.advertised_flow else args.total_flow_lph
+        total = args.total_flow_lph if args.total_flow_lph is not None else 600.0
         flows = [total/2, total/2]
     print("Water properties fixed at 20 C; smooth circular channels; single-phase water.")
     print(f"Channel diameter: {CHANNEL_DIAMETER_M*1000:.3f} mm")
     print(f"Tubing internal diameter from outline: {TUBE_ID_M*1000:.3f} mm")
     print("Tubing/fittings affect achievable flow; this script does not solve pump pressure drop.")
-    if args.advertised_flow:
+    print(f"Channel heated length: {args.length_mm:.2f} mm")
+    if args.advertised_flow or (args.total_flow_lph is None and not args.branch_flow_lph):
         print("SCENARIO ONLY: 600 L/h advertised flow; actual loop flow remains unknown.")
-    elif not args.branch_flow_lph:
+    if not args.branch_flow_lph:
         print("Assumption: equal flow splitting between the two parallel channels.")
     for index, rate in enumerate(flows, 1):
         result = calculate_channel(rate, args.length_mm, args.wall_condition)
